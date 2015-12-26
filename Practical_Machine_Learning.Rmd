@@ -1,0 +1,138 @@
+---
+title: "Practical Machine Learning"
+author: "Sim Chee Yuong"
+date: "26 December 2015"
+output: html_document
+---
+
+## Introduction
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+##Sources
+
+The training data and testing data for this project are available here:
+
+i) Training data
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+ii) Testing data
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: 
+http://groupware.les.inf.puc-rio.br/har.
+
+##Objective
+Our objective is to predict the manner in which they did the exercise. We use classe variable in the training set to complete our prediction. The processes of building the model in this project involve getting and cleaning the data, features selection, algorithm consideration and parameters selection to complete the evaluation. This report may include the types of model to be built, the process of cross validation, the expected out of sample error with a conclusion for the report.
+
+###Data Processing
+
+First, setup the directory and libraries.
+```{r,warning=FALSE,message=FALSE}
+setwd('C:/Users/user/Desktop/Project')
+library(caret)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+```
+
+####Getting and reading the data
+```{r}
+training <- read.csv(file="pml-training.csv", header=TRUE,
+                     sep=",", na.strings = c("NA","#DIV/0!",""))
+testing <- read.csv(file="pml-testing.csv",header=TRUE,
+                    sep=",", na.strings = c("NA","#DIV/0!",""))
+
+names(training)
+str(training)
+summary(training)
+summary(training$classe)
+```
+
+There are 19622 rows and 20 rows in the original training and testing data respectively with 160 columns in both data.
+```{r}
+dim(training);dim(testing)
+```
+
+####Cleaning data 
+Remove the missing values in the data and removing unrelated column.
+```{r}
+mv_training <- is.na(training)
+mv_testing<-is.na(testing)
+training <- training[,colSums(mv_training)==0]
+testing <- testing[,colSums(mv_testing)==0]
+
+training<-training[c(-(1:7))]
+testing<-testing[c(-(1:7))]
+```
+
+The training and testing data sets have 53 columns.
+```{r}
+dim(training);dim(testing)
+```
+
+####Data Slicing
+```{r}
+set.seed(281215)
+inTrain <- createDataPartition(y=training$classe,p=0.6,list=FALSE)
+trainingSet <- training[inTrain,]
+testingSet <- training[-inTrain,]
+plot(trainingSet$classe,col="blue", xlab="Classe Types",
+     ylab="Frequency", main = "Frequence of Each Classe Types")
+```
+
+The classe variable contains 5 types to perform barbell lifts.
+
+###Machine Learning Algorithm for Prediction Process with:
+
+####1) Decision Trees
+```{r chunkName,cache=TRUE}
+modDT<-train(classe ~ ., data = trainingSet,method="rpart")
+print(modDT$finalModel)
+
+#Decision Trees with fancy run command:
+fancyRpartPlot(modDT$finalModel,main="Classification Tree")
+
+#Prediction on training data
+predictionDT <-predict(modDT,newdata=testingSet)
+
+confusionMatrix(predictionDT,testingSet$classe)
+```
+
+####2) Random Forest
+```{r}
+modFit<-train(classe ~ .,data=trainingSet, method="rf", trControl=trainControl(method='cv'), number=5,allowParallel=TRUE)
+
+modFit
+
+predictionRF <-predict(modFit,testingSet)
+
+getTree(modFit$finalModel,k=2)
+predictionRF<-predict(modFit,newdata=testingSet)
+
+confusionMatrix(predictionRF,testingSet$classe)
+```
+
+The result above has been clearly shown that the random forest algorithm has performed better than the decision trees. The accuracy for the random forest model is stated with a percentage of 99.01% for cross-validation dataset with a 95% confidence interval in between 0.9876 and 0.9921. The expected out of sample error rate is 0.99% (1-99.01%).
+Hence, we can conclude that random forest algorithm can be used to build the model in this report.
+
+
+
+####Prediction on real testing data set.
+```{r}
+pred_testing <- predict(modFit, newdata=testing)
+pred_testing
+
+answers <- as.vector(pred_testing)
+
+#Function to generate prediction files for submission.
+write_files = function(x){
+        n = length(x)
+        for(i in 1:20){
+                filename = paste0("problem_id_", i, ".txt")
+                write.table(x[i], file=filename, quote=FALSE,
+                            row.names=FALSE, col.names=FALSE)
+        }
+}
+write_files(pred_testing)
+```
